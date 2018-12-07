@@ -1,25 +1,33 @@
 #include <TM1637Display.h>
+#include <FastLED.h>
 
-// Module connection pins (Digital Pins)
-#define CLK 3
-#define DIO 2
+// Constants
+const int kDisplayCLKpin  = 3;
+const int kdisplayDIOpin  = 2;
+const int kledDINpin      = 6;
+const int kledNum         = 89;
 
-TM1637Display display(CLK, DIO);
-#define TEST_DELAY   2000
-int i;
-int minutes;
+// Variables
+unsigned int i;
 
-//      A
-//     ---
-//  F |   | B
-//     -G-
-//  E |   | C
-//     ---
-//      D
-// first bit toggles colon if set on pos 2
+#define BRIGHTNESS  64
+CRGB leds[kledNum];
+
+////////////////////////////
+// 7-SEGMENT DISPLAY CODE //
+////////////////////////////
+
+TM1637Display display(kDisplayCLKpin, kdisplayDIOpin);
+
 //
-// setBrightness:
-// 0 (lowes brightness) to 7 (highest brightness)
+//  |-A-|
+//  F   B  X
+//  |-G-|
+//  E   C  X
+//  |-D-|
+//
+// Bits are set: XGFEDCBA
+// setBrightness: 0 to 7
 
 #define SIG_B   0b01111111
 #define SIG_Y   0b01101110
@@ -69,48 +77,47 @@ int extractDigit(size_t digit, int n) {
   if (n < mask / 10) { // insufficient digits
     Serial.print("Return 0");
     Serial.println();
-    return 0;
+    return display.encodeDigit(0);
   }
   while ( n >= mask )
     n /= mask;
   Serial.print("Extracted: ");
   Serial.print(n % 10);
   Serial.println();
-  return n % 10;
+  return display.encodeDigit(n % 10);
 }
 
 void printTimer() {
-  int up, minutes, hours;
+  unsigned int up, hrs, mins;
   uint8_t timer[] = { 0xff, 0xff, 0xff, 0xff };
 
   // Read milliseconds and add half a second  to round minutes
   up = (millis() / 1000) + 30;
-  minutes = up / 60;
-  hours   = minutes / 60;
-  minutes = minutes % 60;
-  Serial.print(minutes);
-  Serial.print(" minutes");
+  mins = up / 60;
+  hrs  = mins / 60;
+  mins = mins % 60;
+
+  Serial.print("Uptime: ");
+  Serial.print(hrs);
+  Serial.print(":");
+  Serial.print(mins);
   Serial.println();
-  Serial.print(hours);
-  Serial.print(" hours");
-  Serial.println();
-  if (hours >= 0 && hours < 10) {
+  
+  if (hrs >= 0 && hrs < 10) {
     timer[0] = 0x00;
-    timer[1] = display.encodeDigit(extractDigit(1, hours));
+    timer[1] = extractDigit(1, hrs);
   } else {
-    timer[0] = display.encodeDigit(extractDigit(1, hours));
-    timer[1] = display.encodeDigit(extractDigit(2, hours));
+    timer[0] = extractDigit(1, hrs);
+    timer[1] = extractDigit(2, hrs);
 
   }
-  if (minutes >= 0 && minutes < 10) {
+  if (mins >= 0 && mins < 10) {
     timer[2] = display.encodeDigit(0);
-    timer[3] = display.encodeDigit(extractDigit(1, minutes));
+    timer[3] = extractDigit(1, mins);
   } else {
-    timer[2] = display.encodeDigit(extractDigit(1, minutes));
-    timer[3] = display.encodeDigit(extractDigit(2, minutes));
+    timer[2] = extractDigit(1, mins);
+    timer[3] = extractDigit(2, mins);
   }
-  Serial.print("---------------");
-  Serial.println();
 
   // Blinking dots
   for (i = 0; i < 2; i++) {
@@ -128,15 +135,29 @@ void glitchC3() {
 
 }
 
+////////////////
+// LED STRIPE //
+////////////////
+
+
+///////////////
+// MAIN LOOP //
+///////////////
+
 void setup() {
   Serial.begin(9600);
   Serial.print("Start");
   Serial.println();
+
+  delay( 3000 ); // power-up safety delay
+  FastLED.addLeds<WS2812B, kledDINpin, GRB>(leds, kledNum).setCorrection( TypicalLEDStrip );
+  FastLED.setBrightness(  BRIGHTNESS );
 }
 
 void loop() {
+  
   display.setBrightness(7);
-  for(i = 0; i < 5; i++) {
+  for (i = 0; i < 5; i++) {
     display.setSegments(strLINU);
     delay(250);
     display.setSegments(strLINM);
@@ -157,7 +178,14 @@ void loop() {
     display.setSegments(strBLCK);
     delay(2000);
   }
-  
+
   printTimer();
   delay(1000);
+  
+
+  for(int i = 0; i < kledNum; i++) {
+    leds[i] = CRGB::Blue;    // set our current dot to red
+    FastLED.show();
+    leds[i] = CRGB::Black;  // set our current dot to black before we continue
+  }
 }

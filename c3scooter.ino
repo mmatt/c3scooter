@@ -79,7 +79,6 @@ void glitchC3() {
 }
 
 void displayShiftPark() {
-  
   display.setSegments(kwordBye_);
   delay(450);
   display.setSegments(kword_bye);
@@ -171,7 +170,7 @@ void setup() {
   FastLED.setBrightness(  BRIGHTNESS );
 
   // Initialize 7 segment display
-  display.setBrightness(7, true);
+  display.setBrightness(2, true);
 
   pinMode(kbuttonDINpin, INPUT);
 }
@@ -208,12 +207,12 @@ void loop() {
   }
 
   
-  //delay(1000);
+  delay(100);
   
 
   
   
   Serial.print("This loop took ");
   Serial.print((millis() - current_ms));
-  Serial.println();  
+  Serial.println();
 }

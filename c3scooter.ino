@@ -1,19 +1,22 @@
 #include <TM1637Display.h>
 #include <FastLED.h>
+#include <Wire.h>
+#include "MPU6050.h"
 
 // Constants
-const int kDisplayCLKpin  = 3;
-const int kdisplayDIOpin  = 2;
-const int kledDINpin      = 6;
-const int kbuttonDINpin   = 5;
-const int kledNum         = 89;
+const int     kDisplayCLKpin  = 3;
+const int     kdisplayDIOpin  = 2;
+const int     kgyroMPUaddr    = 0x68;
+const int     kledDINpin      = 6;
+const int     kbuttonDINpin   = 5;
+const int     kledNum         = 89;
 
-const uint8_t kwordBye_[] = { 0b01111111, 0b01101110, 0b01111001, 0x00 };
-const uint8_t kword_bye[] = { 0x00, 0b01111111, 0b01101110, 0b01111001 };
-const uint8_t kwordHey_[] = { 0b01110110, 0b01111001, 0b01101110, 0x00 };
-const uint8_t kword_hey[] = { 0x00, 0b01110110, 0b01111001, 0b01101110 };
-const uint8_t kwordDots[] = { 0x00, 0b10000000, 0x00, 0x00 };
-const uint8_t kwordBlnk[] = { 0x00, 0x00, 0x00, 0x00 };
+const uint8_t kwordBye_[]     = { 0b01111111, 0b01101110, 0b01111001, 0x00 };
+const uint8_t kword_bye[]     = { 0x00, 0b01111111, 0b01101110, 0b01111001 };
+const uint8_t kwordHey_[]     = { 0b01110110, 0b01111001, 0b01101110, 0x00 };
+const uint8_t kword_hey[]     = { 0x00, 0b01110110, 0b01111001, 0b01101110 };
+const uint8_t kwordDots[]     = { 0x00, 0b10000000, 0x00, 0x00 };
+const uint8_t kwordBlnk[]     = { 0x00, 0x00, 0x00, 0x00 };
 
 // Variables
 unsigned int  i;
@@ -23,13 +26,19 @@ unsigned long button_ms       = 0;
 unsigned int  button_state    = 0;
 unsigned int  button_block    = 2000;
 
-unsigned int  park_mode       = 0;
+unsigned int  park_mode       = 1;
 unsigned long park_dot_ms     = 0;
 unsigned int  park_dot_state  = 0;
+unsigned long park_gyro_ms    = 0;
+unsigned int  park_gyro_alert = 0;
 
 unsigned int  drive_glitch    = 0;
 unsigned long drive_dot_ms    = 0;
 unsigned int  drive_dot_state = 0;
+
+int16_t       accel_x, accel_y, accel_z;
+int16_t       gyro_x, gyro_y, gyro_z;
+int16_t temperature;
 
 #define BRIGHTNESS  64
 CRGB leds[kledNum];
@@ -149,6 +158,53 @@ void displayDrive() {
   }
 }
 
+///////////////
+// GYROSCOPE //
+///////////////
+
+// SCL to pin A5
+// SDA to pin A4
+
+char tmp_str[7];
+char* convert_int16_to_str(int16_t i) { // converts int16 to string. Moreover, resulting strings will have the same length in the debug monitor.
+  sprintf(tmp_str, "%6d", i);
+  return tmp_str;
+}
+
+void readGyro() {
+      Serial.print("Time diff is ");
+  Serial.print(current_ms - park_gyro_ms);
+  Serial.println();
+  if ((current_ms - park_gyro_ms) > 1000) {
+
+  
+    Wire.beginTransmission(kgyroMPUaddr);
+    Wire.write(0x3B); // start with 0x3B (ACCEL_XOUT_H)
+    Wire.endTransmission(false);
+    Wire.requestFrom(kgyroMPUaddr, 7*2, true); // request 14 registers
+  
+    // "Wire.read()<<8 | Wire.read();" means two registers are read and stored in the same variable
+    accel_x = Wire.read()<<8 | Wire.read(); // reading registers: 0x3B (ACCEL_XOUT_H) and 0x3C (ACCEL_XOUT_L)
+    accel_y = Wire.read()<<8 | Wire.read(); // reading registers: 0x3D (ACCEL_YOUT_H) and 0x3E (ACCEL_YOUT_L)
+    accel_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x3F (ACCEL_ZOUT_H) and 0x40 (ACCEL_ZOUT_L)
+    temperature = Wire.read()<<8 | Wire.read(); // reading registers: 0x41 (TEMP_OUT_H) and 0x42 (TEMP_OUT_L)
+    gyro_x = Wire.read()<<8 | Wire.read(); // reading registers: 0x43 (GYRO_XOUT_H) and 0x44 (GYRO_XOUT_L)
+    gyro_y = Wire.read()<<8 | Wire.read(); // reading registers: 0x45 (GYRO_YOUT_H) and 0x46 (GYRO_YOUT_L)
+    gyro_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x47 (GYRO_ZOUT_H) and 0x48 (GYRO_ZOUT_L)
+  
+    Serial.print("aX = "); Serial.print(convert_int16_to_str(accel_x));
+    Serial.print(" | aY = "); Serial.print(convert_int16_to_str(accel_y));
+    Serial.print(" | aZ = "); Serial.print(convert_int16_to_str(accel_z));
+    // the following equation was taken from the documentation [MPU-6000/MPU-6050 Register Map and Description, p.30]
+    Serial.print(" | tmp = "); Serial.print(temperature/340.00+36.53);
+    Serial.print(" | gX = "); Serial.print(convert_int16_to_str(gyro_x));
+    Serial.print(" | gY = "); Serial.print(convert_int16_to_str(gyro_y));
+    Serial.print(" | gZ = "); Serial.print(convert_int16_to_str(gyro_z));
+    Serial.println();
+    park_gyro_ms = current_ms;
+  }
+}
+
 ////////////////
 // LED STRIPE //
 ////////////////
@@ -172,12 +228,21 @@ void setup() {
   // Initialize 7 segment display
   display.setBrightness(2, true);
 
+  // Initizialize button
   pinMode(kbuttonDINpin, INPUT);
+
+  // Initialize gyroscope communication
+  Wire.begin();
+  Wire.beginTransmission(kgyroMPUaddr);
+  Wire.write(0x6B); // PWR_MGMT_1 register
+  Wire.write(0); // wake up the MPU-6050
+  Wire.endTransmission(true);
 }
 
 void loop() {
   current_ms = millis();
-  
+
+  // Check button state
   button_state = digitalRead(kbuttonDINpin);
   if (button_state == HIGH && park_mode == 0 && (current_ms - button_ms) > button_block) {
     // enter parking mode
@@ -190,14 +255,18 @@ void loop() {
     button_ms = current_ms;
   }
 
+  // Act according to mode
   if (park_mode == 1) {
+    // We are parked
     displayPark();
+    readGyro();
     for(int i = 0; i < kledNum; i++) {
       leds[i] = CRGB::Blue;    // set our current dot to red
       FastLED.show();
       leds[i] = CRGB::Black;  // set our current dot to black before we continue
     }
   } else {
+    // We're in drive
     displayDrive();
     for(int i = 0; i < kledNum; i++) {
       leds[i] = CRGB::Red;    // set our current dot to red
@@ -211,8 +280,9 @@ void loop() {
   
 
   
-  
+  /*
   Serial.print("This loop took ");
   Serial.print((millis() - current_ms));
   Serial.println();
+  */
 }

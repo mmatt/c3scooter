@@ -4,17 +4,20 @@
 #include "MPU6050.h"
 
 // Constants
-const int     kDisplayCLKpin  = 3;
-const int     kdisplayDIOpin  = 2;
+const int     kDisplayCLKpin  = 8;
+const int     kdisplayDIOpin  = 7;
 const int     kgyroMPUaddr    = 0x68;
-const int     kledDINpin      = 6;
-const int     kbuttonDINpin   = 5;
-const int     kledNum         = 89;
+const int     kledDINpin      = 9;
+const int     kbuttonDINpin   = 10;
+const int     kledNum         = 80;
 
 const uint8_t kwordBye_[]     = { 0b01111111, 0b01101110, 0b01111001, 0x00 };
 const uint8_t kword_bye[]     = { 0x00, 0b01111111, 0b01101110, 0b01111001 };
 const uint8_t kwordHey_[]     = { 0b01110110, 0b01111001, 0b01101110, 0x00 };
 const uint8_t kword_hey[]     = { 0x00, 0b01110110, 0b01111001, 0b01101110 };
+const uint8_t kwordCALI[]     = { 0b00111001, 0b01110111, 0b00111000, 0b00110000 };
+const uint8_t kwordSOS_[]     = { 0b01101101, 0b00111111, 0b01101101, 0x00 };
+const uint8_t kword_SOS[]     = { 0x00, 0b01101101, 0b00111111, 0b01101101 };
 const uint8_t kwordDots[]     = { 0x00, 0b10000000, 0x00, 0x00 };
 const uint8_t kwordBlnk[]     = { 0x00, 0x00, 0x00, 0x00 };
 
@@ -172,9 +175,11 @@ char* convert_int16_to_str(int16_t i) { // converts int16 to string. Moreover, r
 }
 
 void readGyro() {
+  
       Serial.print("Time diff is ");
   Serial.print(current_ms - park_gyro_ms);
   Serial.println();
+  
   if ((current_ms - park_gyro_ms) > 1000) {
 
   
@@ -185,14 +190,18 @@ void readGyro() {
   
     // "Wire.read()<<8 | Wire.read();" means two registers are read and stored in the same variable
     accel_x = Wire.read()<<8 | Wire.read(); // reading registers: 0x3B (ACCEL_XOUT_H) and 0x3C (ACCEL_XOUT_L)
+    /*
     accel_y = Wire.read()<<8 | Wire.read(); // reading registers: 0x3D (ACCEL_YOUT_H) and 0x3E (ACCEL_YOUT_L)
     accel_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x3F (ACCEL_ZOUT_H) and 0x40 (ACCEL_ZOUT_L)
     temperature = Wire.read()<<8 | Wire.read(); // reading registers: 0x41 (TEMP_OUT_H) and 0x42 (TEMP_OUT_L)
     gyro_x = Wire.read()<<8 | Wire.read(); // reading registers: 0x43 (GYRO_XOUT_H) and 0x44 (GYRO_XOUT_L)
     gyro_y = Wire.read()<<8 | Wire.read(); // reading registers: 0x45 (GYRO_YOUT_H) and 0x46 (GYRO_YOUT_L)
     gyro_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x47 (GYRO_ZOUT_H) and 0x48 (GYRO_ZOUT_L)
-  
+    */
+
+    
     Serial.print("aX = "); Serial.print(convert_int16_to_str(accel_x));
+    /*
     Serial.print(" | aY = "); Serial.print(convert_int16_to_str(accel_y));
     Serial.print(" | aZ = "); Serial.print(convert_int16_to_str(accel_z));
     // the following equation was taken from the documentation [MPU-6000/MPU-6050 Register Map and Description, p.30]
@@ -200,14 +209,15 @@ void readGyro() {
     Serial.print(" | gX = "); Serial.print(convert_int16_to_str(gyro_x));
     Serial.print(" | gY = "); Serial.print(convert_int16_to_str(gyro_y));
     Serial.print(" | gZ = "); Serial.print(convert_int16_to_str(gyro_z));
+    */
     Serial.println();
     park_gyro_ms = current_ms;
   }
 }
 
-////////////////
-// LED STRIPE //
-////////////////
+///////////////
+// LED STRIP //
+///////////////
 
 
 ///////////////
@@ -246,10 +256,16 @@ void loop() {
   button_state = digitalRead(kbuttonDINpin);
   if (button_state == HIGH && park_mode == 0 && (current_ms - button_ms) > button_block) {
     // enter parking mode
+    Serial.print("Enter parking mode");
+  Serial.print((millis() - current_ms));
+  Serial.println();
     displayShiftPark();
     park_mode = 1;
     button_ms = current_ms;
   } else if (button_state == HIGH && park_mode == 1 && (current_ms - button_ms) > button_block) {
+        Serial.print("Enter drive mode");
+  Serial.print((millis() - current_ms));
+  Serial.println();
     displayShiftDrive();
     park_mode = 0;
     button_ms = current_ms;
@@ -276,13 +292,10 @@ void loop() {
   }
 
   
-  delay(100);
+  //delay(100);
   
 
-  
-  /*
   Serial.print("This loop took ");
   Serial.print((millis() - current_ms));
   Serial.println();
-  */
 }

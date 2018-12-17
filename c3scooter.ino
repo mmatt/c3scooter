@@ -158,7 +158,7 @@ void displayDrive() {
     display.setSegments(timer);
 
     // Reset SOS in drive mode 
-    park_flash_ms = 0;
+    park_sos_ms = 0;
   }
 }
 
@@ -183,90 +183,51 @@ void displaySos() {
 // SDA to pin A4
 
 void readGyro() {
-
-  /*
-  Serial.print("Time diff is ");
-  Serial.print(current_ms - park_gyro_ms);
-  Serial.println();
-  */
-  
-  if ((current_ms - park_gyro_ms) > 50) {
-
+ 
+  if ((current_ms - park_gyro_ms) > 100) {
   
     Wire.beginTransmission(kGyroMpuAddr);
-    //Wire.write(0x3B); // start with 0x3B (ACCEL_XOUT_H)
     Wire.write(0x43); 
     Wire.endTransmission(false);
-    Wire.requestFrom(kGyroMpuAddr, 7*2, true); // request 14 registers
+    Wire.requestFrom(kGyroMpuAddr, 3*2, true); // request 6 registers
   
-    // "Wire.read()<<8 | Wire.read();" means two registers are read and stored in the same variable
-    /*
-    accel_x = Wire.read()<<8 | Wire.read(); // reading registers: 0x3B (ACCEL_XOUT_H) and 0x3C (ACCEL_XOUT_L)
-    
-    accel_y = Wire.read()<<8 | Wire.read(); // reading registers: 0x3D (ACCEL_YOUT_H) and 0x3E (ACCEL_YOUT_L)
-    
-    accel_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x3F (ACCEL_ZOUT_H) and 0x40 (ACCEL_ZOUT_L)
-    temperature = Wire.read()<<8 | Wire.read(); // reading registers: 0x41 (TEMP_OUT_H) and 0x42 (TEMP_OUT_L)
-    */
-    gyro_x = Wire.read()<<8 | Wire.read(); // reading registers: 0x43 (GYRO_XOUT_H) and 0x44 (GYRO_XOUT_L)
-    gyro_y = Wire.read()<<8 | Wire.read(); // reading registers: 0x45 (GYRO_YOUT_H) and 0x46 (GYRO_YOUT_L)
-    gyro_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x47 (GYRO_ZOUT_H) and 0x48 (GYRO_ZOUT_L)
-    
-    //accel_total = 0;
-    //accel_total = abs(accel_x_prev - accel_x) + abs(accel_y_prev - accel_y) + abs(accel_z_prev - accel_z);
+    gyro_x = Wire.read()<<8 | Wire.read(); // registers: 0x43 (GYRO_XOUT_H) and 0x44 (GYRO_XOUT_L)
+    gyro_y = Wire.read()<<8 | Wire.read(); // registers: 0x45 (GYRO_YOUT_H) and 0x46 (GYRO_YOUT_L)
+    gyro_z = Wire.read()<<8 | Wire.read(); // registers: 0x47 (GYRO_ZOUT_H) and 0x48 (GYRO_ZOUT_L)
     gyro_total = abs(gyro_x_prev - gyro_x) + abs(gyro_y_prev - gyro_y) + abs(gyro_z_prev - gyro_z);
-    /*
-    if (accel_x_prev > accel_x) {
-      accel_calc = accel_x_prev - accel_x;
-    } else {
-      
-    }*/
-    
 
-    //Serial.print("TEST "); Serial.print(accel_total);
-    //Serial.print("Gyro Total "); Serial.print(gyro_total);
-    /*
-    Serial.print("aX = "); Serial.print(convert_int16_to_str(accel_x));
-    
-    Serial.print(" | aY = "); Serial.print(convert_int16_to_str(accel_y));
-    
-    Serial.print(" | aZ = "); Serial.print(convert_int16_to_str(accel_z));
-    // the following equation was taken from the documentation [MPU-6000/MPU-6050 Register Map and Description, p.30]
-    Serial.print(" | tmp = "); Serial.print(temperature/340.00+36.53);
-    Serial.print(" | gX = "); Serial.print(convert_int16_to_str(gyro_x));
-    Serial.print(" | gY = "); Serial.print(convert_int16_to_str(gyro_y));
-    Serial.print(" | gZ = "); Serial.print(convert_int16_to_str(gyro_z));
+    Serial.print("Gyro total "); Serial.print(gyro_total);
     Serial.println();
-    accel_x_prev = accel_x;
-    accel_y_prev = accel_y;
-    accel_z_prev = accel_z;
-    */
 
-    // use gyros to calculate height of alert bar
+    // Increase alertness on thershold (higher first step)
     if ((gyro_total > 250 && park_gyro_alert == 0) || (gyro_total > 150 && park_gyro_alert > 0)) {
       if (park_gyro_alert < kLedNum) {
         park_gyro_alert+=2;
-        if (park_flash_state == 1) {
-          fill_solid( &(leds[i]), park_gyro_alert, CRGB::Red );
-        }
+        Serial.print("Increase!");
+        Serial.println();
       }
+      fill_solid( leds, park_gyro_alert, CRGB::Red );
+    // Decrease alerness
     } else if (gyro_total < 100 && park_gyro_alert > 0) {
       park_gyro_alert--;
-      if (park_flash_state == 1) {
-        fill_solid( &(leds[i]), park_gyro_alert, CRGB::Red );
-        leds[park_gyro_alert] = CRGB::Black;
-      }
+      Serial.print("Decrease!");
+      Serial.println();
+      fill_solid( leds, park_gyro_alert, CRGB::Red );
+      leds[park_gyro_alert] = CRGB::Black;
     } 
+
+    Serial.print("Now at: "); Serial.print(park_gyro_alert);
+    Serial.println();
 
     // Alert flashing
     if ((current_ms - park_flash_ms) > 200) {
       if (park_flash_state == 0) {
-        fill_solid( &(leds[i]), park_gyro_alert, CRGB::White );
+        fill_solid( leds, park_gyro_alert, CRGB::White );
         park_flash_state = 1;
       } else {
         // Only flash over certain threshold
-        if (park_gyro_alert > 40) {
-          fill_solid( &(leds[i]), kLedNum, CRGB::Black );
+        if (park_gyro_alert > 50) {
+          fill_solid( leds, kLedNum, CRGB::Black );
           park_flash_state = 0;
         }
       }
@@ -277,10 +238,10 @@ void readGyro() {
     if (park_gyro_alert == kLedNum) {
       displaySos();
       for(j = 0; j < 30; j++) {
-        fill_solid( &(leds[i]), kLedNum, CRGB::White );
+        fill_solid( leds, kLedNum, CRGB::White );
         FastLED.show();
         delay(50);
-        fill_solid( &(leds[i]), kLedNum, CRGB::Black );
+        fill_solid( leds, kLedNum, CRGB::Black );
         FastLED.show();
         delay(50);
       }

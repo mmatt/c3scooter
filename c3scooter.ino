@@ -1,9 +1,9 @@
-#include <TM1637Display.h>
 #include <FastLED.h>
 #include <MPU6050.h>
+#include <TM1637Display.h>
 
 // Constants
-const int     kVersion        = 1;
+const int     kVersion        = 2;
 const int     kDisplayClkPin  = 8;
 const int     kDisplayDioPin  = 7;
 const int     kGyroMpuAddr    = 0x68;
@@ -106,17 +106,11 @@ void displayPark() {
   } else if (park_dot_state == 0 && (current_ms - park_dot_ms) > 2000) {
     // turn it on
     display.setSegments(kwordDots);
-//    Serial.print("Turn on after ");
-//    Serial.print((current_ms - park_dot_ms));
-//    Serial.println();
     park_dot_state = 1;
     park_dot_ms = current_ms;
   } else if (park_dot_state == 1 && (current_ms - park_dot_ms) > 100) {
     // turn it off
     display.setSegments(kwordBlnk);
-//    Serial.print("Turn off after ");
-//    Serial.print((current_ms - park_dot_ms));
-//    Serial.println();
     park_dot_state = 0;
     park_dot_ms = current_ms;
   }
@@ -194,13 +188,16 @@ void readGyro() {
     gyro_x = Wire.read()<<8 | Wire.read(); // registers: 0x43 (GYRO_XOUT_H) and 0x44 (GYRO_XOUT_L)
     gyro_y = Wire.read()<<8 | Wire.read(); // registers: 0x45 (GYRO_YOUT_H) and 0x46 (GYRO_YOUT_L)
     gyro_z = Wire.read()<<8 | Wire.read(); // registers: 0x47 (GYRO_ZOUT_H) and 0x48 (GYRO_ZOUT_L)
-    gyro_total = abs(gyro_x_prev - gyro_x) + abs(gyro_y_prev - gyro_y) + abs(gyro_z_prev - gyro_z);
+    // Check if we have something to compare
+    if (gyro_x_prev > 0 || gyro_y_prev > 0 || gyro_z_prev > 0) {
+      gyro_total = abs(gyro_x_prev - gyro_x) + abs(gyro_y_prev - gyro_y) + abs(gyro_z_prev - gyro_z);
+    }
 
     Serial.print("Gyro total "); Serial.print(gyro_total);
     Serial.println();
 
     // Increase alertness on thershold (higher first step)
-    if ((gyro_total > 250 && park_gyro_alert == 0) || (gyro_total > 150 && park_gyro_alert > 0)) {
+    if ((gyro_total > 300 && park_gyro_alert == 0) || (gyro_total > 200 && park_gyro_alert > 0)) {
       if (park_gyro_alert < kLedNum) {
         park_gyro_alert+=2;
         Serial.print("Increase!");
@@ -220,22 +217,20 @@ void readGyro() {
     Serial.println();
 
     // Alert flashing
-    if ((current_ms - park_flash_ms) > 200) {
+    if ((current_ms - park_flash_ms) > 200 && park_gyro_alert > 50) {
       if (park_flash_state == 0) {
         fill_solid( leds, park_gyro_alert, CRGB::White );
         park_flash_state = 1;
       } else {
-        // Only flash over certain threshold
-        if (park_gyro_alert > 50) {
-          fill_solid( leds, kLedNum, CRGB::Black );
-          park_flash_state = 0;
-        }
+        fill_solid( leds, kLedNum, CRGB::Black );
+        park_flash_state = 0;
       }
       park_flash_ms = current_ms;
     } 
     FastLED.show();
 
-    if (park_gyro_alert == kLedNum) {
+    if (park_gyro_alert >= kLedNum) {
+      park_gyro_alert = kLedNum;
       displaySos();
       for(j = 0; j < 30; j++) {
         fill_solid( leds, kLedNum, CRGB::White );

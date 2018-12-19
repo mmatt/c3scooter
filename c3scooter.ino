@@ -18,6 +18,8 @@ const uint8_t kwordHey_[]     = { 0b01110110, 0b01111001, 0b01101110, 0x00 };
 const uint8_t kword_hey[]     = { 0x00, 0b01110110, 0b01111001, 0b01101110 };
 const uint8_t kwordSos_[]     = { 0b01101101, 0b00111111, 0b01101101, 0x00 };
 const uint8_t kword_sos[]     = { 0x00, 0b01101101, 0b00111111, 0b01101101 };
+const uint8_t kwordXxc3[]     = { 0b01001111, 0b01101101, 0b00111001, 0b01001111 };
+const uint8_t kwordXyc3[]     = { 0b01111001, 0b01011010, 0b00001111, 0b01111001 };
 const uint8_t kwordDots[]     = { 0x00, 0b10000000, 0x00, 0x00 };
 const uint8_t kwordBlnk[]     = { 0x00, 0x00, 0x00, 0x00 };
 
@@ -43,13 +45,9 @@ unsigned int  drive_glitch    = 0;
 unsigned long drive_dot_ms    = 0;
 unsigned int  drive_dot_state = 0;
 
-int16_t       accel_x, accel_y, accel_z;
-int16_t       accel_x_prev, accel_y_prev, accel_z_prev;
-int16_t       accel_total, accel_calc;
 int16_t       gyro_x, gyro_y, gyro_z;
 int16_t       gyro_x_prev, gyro_y_prev, gyro_z_prev;
-int16_t       gyro_total, gyro_calc;
-int16_t       temperature;
+int16_t       gyro_total;
 
 CRGB leds[kLedNum];
 

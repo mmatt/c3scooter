@@ -10,7 +10,7 @@ const int     kGyroMpuAddr    = 0x68;
 const int     kLedDinPin      = 9;
 const int     kButtonDinPin   = 10;
 const int     kLedNum         = 80;
-const int     kLedBrightness  = 64;
+const int     kLedBrightness  = 200;
 
 const uint8_t kwordBye_[]     = { 0b01111111, 0b01101110, 0b01111001, 0x00 };
 const uint8_t kword_bye[]     = { 0x00, 0b01111111, 0b01101110, 0b01111001 };
@@ -48,6 +48,15 @@ unsigned int  drive_dot_state = 0;
 int16_t       gyro_x, gyro_y, gyro_z;
 int16_t       gyro_x_prev, gyro_y_prev, gyro_z_prev;
 int16_t       gyro_total;
+
+#define twinkle_peak       CRGB(32,0,32)
+#define twinkle_base       CRGB(0,0,0)
+#define twinkle_up   CRGB(random8(5),random8(2),random8(5))
+#define twinkle_down CRGB(1,1,1)
+
+uint8_t       twinkle_state[kLedNum];
+uint8_t       twinkle_chance  = 25;
+enum          { isDark, getBrighter, getDimmer };
 
 CRGB leds[kLedNum];
 
@@ -196,6 +205,10 @@ void readGyro() {
 
     // Increase alertness on thershold (higher first step)
     if ((gyro_total > 300 && park_gyro_alert == 0) || (gyro_total > 200 && park_gyro_alert > 0)) {
+      // Reset to black on start
+      if (park_gyro_alert == 0) {
+        fill_solid( leds, kLedNum, CRGB::Black );
+      }
       if (park_gyro_alert < kLedNum) {
         park_gyro_alert+=2;
         Serial.print("Increase!");
@@ -230,7 +243,7 @@ void readGyro() {
     if (park_gyro_alert >= kLedNum) {
       park_gyro_alert = kLedNum;
       displaySos();
-      for(j = 0; j < 30; j++) {
+      for (j = 0; j < 30; j++) {
         fill_solid( leds, kLedNum, CRGB::White );
         FastLED.show();
         delay(50);
@@ -253,6 +266,35 @@ void readGyro() {
 // LED STRIP //
 ///////////////
 
+void twinkleStars() {
+  if (park_gyro_alert == 0) {
+    for (j = 0; j < kLedNum; j++) {
+      if (twinkle_state[j] == isDark) {
+        if( random16() < twinkle_chance) {
+          twinkle_state[j] = getBrighter;
+        }
+      } else if( twinkle_state[j] == getBrighter ) {
+        // this pixels is currently: GettingBrighter
+        // so if it's at peak color, switch it to getting dimmer again
+        if( leds[j] >= CRGB(random8(),random8(),random8()) ) {
+          twinkle_state[j] = getDimmer;
+        } else {
+          leds[j] += twinkle_up;
+        }
+      } else {
+        if( leds[j] <= twinkle_base ) {
+          leds[j] = twinkle_base; // reset to exact base color, in case we overshot
+          twinkle_state[j] = isDark;
+        } else {
+          // otherwise, just keep dimming it down:
+          leds[j] -= twinkle_down;
+        }
+      }
+    }
+    FastLED.show();
+    delay(20);
+  }
+}
 
 ///////////////
 // MAIN LOOP //
@@ -312,6 +354,7 @@ void loop() {
     // We are parked
     displayPark();
     readGyro();
+    twinkleStars();
     /*
     for(int i = 0; i < kLedNum; i++) {
       leds[i] = CRGB::Blue;    // set our current dot to red

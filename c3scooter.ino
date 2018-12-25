@@ -3,7 +3,7 @@
 #include <TM1637Display.h>
 
 // Constants
-const int     kVersion              = 2;
+const int     kVersion              = 3;
 const int     kDisplayClkPin        = 8;
 const int     kDisplayDioPin        = 7;
 const int     kGyroMpuAddr          = 0x68;
@@ -29,7 +29,7 @@ unsigned long current_ms            = 0;
 
 unsigned long button_ms             = 0;
 unsigned int  button_state          = 0;
-unsigned int  button_block          = 2000;
+unsigned int  button_block          = 1000;
 
 unsigned int  park_mode             = 1;
 unsigned long park_dot_ms           = 0;
@@ -48,21 +48,28 @@ unsigned int  drive_dot_state       = 0;
 unsigned long drive_sparkle_ms      = 0;
 unsigned long drive_effect_ms       = 0;
 unsigned int  drive_effect_num      = 1;
-unsigned int  drive_effect_hold_ms  = 10000;
+unsigned int  drive_effect_hold_ms  = 20000;
 
 int16_t       gyro_x, gyro_y, gyro_z;
 int16_t       gyro_x_prev, gyro_y_prev, gyro_z_prev;
 int16_t       gyro_total;
 
-#define twinkle_peak       CRGB(32,0,32)
-#define twinkle_base       CRGB(0,0,0)
-#define twinkle_up   CRGB(random8(5),random8(2),random8(5))
-#define twinkle_down CRGB(1,1,1)
-
 uint8_t       twinkle_state[kLedNum];
 enum          { isDark, getBrighter, getDimmer };
 
+#define twinkle_peak  CRGB(32,0,32)
+#define twinkle_base  CRGB(0,0,0)
+#define twinkle_up    CRGB(random8(5),random8(2),random8(5))
+#define twinkle_down  CRGB(1,1,1)
+// Use qsuba for smooth pixel colouring and qsubd for non-smooth pixel colouring
+#define qsubd(x, b)   ((x>b)?b:0)    // Digital unsigned subtraction macro. if result <0, then => 0. Otherwise, take on fixed value.
+#define qsuba(x, b)   ((x>b)?x-b:0)  // Analog Unsigned subtraction macro. if result <0, then => 0
+
 CRGB leds[kLedNum];
+CRGBPalette16 currentPalette = LavaColors_p;
+CRGBPalette16 targetPalette = LavaColors_p;
+
+TBlendType    currentBlending = LINEARBLEND;
 
 ////////////////////////////
 // 7-SEGMENT DISPLAY CODE //
@@ -283,7 +290,6 @@ void setPixel(int Pixel, byte red, byte green, byte blue) {
   leds[Pixel].b = blue;
 }
 
-
 void twinkleStars() {
   if (park_gyro_alert == 0) {
     for (j = 0; j < kLedNum; j++) {
@@ -319,7 +325,7 @@ void snowSparkle(int sparkleDelay, int sparkleChance) {
     if( random16() < sparkleChance) {
       setAll(0x10, 0x10, 0x10);
       int Pixel = random(kLedNum);
-      setPixel(Pixel,0xff,0xff,0xff);
+      setPixel(Pixel,0xff,0x00,0x64);
       FastLED.show();
       delay(sparkleDelay);
       setPixel(Pixel,0x10, 0x10, 0x10);
@@ -340,12 +346,14 @@ void rainbowCycle(int speedDelay) {
     }
     FastLED.show();
     delay(speedDelay);
+    if (digitalRead(kButtonDinPin) == HIGH) {
+      break;
+    }
   }
 }
 
 byte * Wheel(byte WheelPos) {
   static byte c[3];
-  
   if(WheelPos < 85) {
    c[0]=WheelPos * 3;
    c[1]=255 - WheelPos * 3;
@@ -361,138 +369,139 @@ byte * Wheel(byte WheelPos) {
    c[1]=WheelPos * 3;
    c[2]=255 - WheelPos * 3;
   }
-
   return c;
 }
 
 void meteorRain(byte red, byte green, byte blue, byte meteorSize, byte meteorTrailDecay, boolean meteorRandomDecay, int SpeedDelay) {  
   setAll(0,0,0);
-  
   for(int i = 0; i < kLedNum+kLedNum; i++) {
-    
-    
     // fade brightness all LEDs one step
     for(int j=0; j<kLedNum; j++) {
       if( (!meteorRandomDecay) || (random(10)>5) ) {
         leds[j].fadeToBlackBy( meteorTrailDecay );
       }
     }
-    
     // draw meteor
     for(int j = 0; j < meteorSize; j++) {
       if( ( i-j <kLedNum) && (i-j>=0) ) {
         setPixel(i-j, red, green, blue);
       } 
     }
-   
     FastLED.show();
     delay(SpeedDelay);
-  }
-}
-
-void CylonBounce(byte red, byte green, byte blue, int EyeSize, int SpeedDelay, int ReturnDelay){
-
-  for(int i = 0; i < kLedNum-EyeSize-2; i++) {
-    setAll(0,0,0);
-    setPixel(i, red/10, green/10, blue/10);
-    for(int j = 1; j <= EyeSize; j++) {
-      setPixel(i+j, red, green, blue); 
+    // Exit loop when button is pressed
+    if (digitalRead(kButtonDinPin) == HIGH) {
+      break;
     }
-    setPixel(i+EyeSize+1, red/10, green/10, blue/10);
-    FastLED.show();
-    delay(SpeedDelay);
   }
-
-  delay(ReturnDelay);
-
-  for(int i = kLedNum-EyeSize-2; i > 0; i--) {
-    setAll(0,0,0);
-    setPixel(i, red/10, green/10, blue/10);
-    for(int j = 1; j <= EyeSize; j++) {
-      setPixel(i+j, red, green, blue); 
-    }
-    setPixel(i+EyeSize+1, red/10, green/10, blue/10);
-    FastLED.show();
-    delay(SpeedDelay);
-  }
-  
-  delay(ReturnDelay);
 }
 
 void rainbow_beat() {
-  
   uint8_t beatA = beatsin8(17, 0, 255);                        // Starting hue
   uint8_t beatB = beatsin8(13, 0, 255);
   fill_rainbow(leds, kLedNum, (beatA+beatB)/2, 8);            // Use FastLED's fill_rainbow routine.
   FastLED.show();
 } 
 
-void rainbow_march(uint8_t thisdelay, uint8_t deltahue) {     // The fill_rainbow call doesn't support brightness levels.
-
-  uint8_t thishue = millis()*(255-thisdelay)/255;             // To change the rate, add a beat or something to the result. 'thisdelay' must be a fixed value.
-  
-// thishue = beat8(50);                                       // This uses a FastLED sawtooth generator. Again, the '50' should not change on the fly.
-// thishue = beatsin8(50,0,255);                              // This can change speeds on the fly. You can also add these to each other.
-  
-  fill_rainbow(leds, kLedNum, thishue, deltahue);            // Use FastLED's fill_rainbow routine.
+void rainbow_march(uint8_t thisdelay, uint8_t deltahue) {
+  uint8_t thishue = millis()*(255-thisdelay)/255;
+  fill_rainbow(leds, kLedNum, thishue, deltahue);
   FastLED.show();
+}
 
-} // rainbow_march()
-
-
-// Use qsuba for smooth pixel colouring and qsubd for non-smooth pixel colouring
-#define qsubd(x, b)  ((x>b)?b:0)                              // Digital unsigned subtraction macro. if result <0, then => 0. Otherwise, take on fixed value.
-#define qsuba(x, b)  ((x>b)?x-b:0)                            // Analog Unsigned subtraction macro. if result <0, then => 0
-
-CRGBPalette16 currentPalette = LavaColors_p;
-CRGBPalette16 targetPalette = LavaColors_p;
-TBlendType    currentBlending = LINEARBLEND;
-
-void matrix_ray_loop() {
-                                                                // This section changes the delay, which adjusts how fast the 'rays' are travelling down the length of the strand.
-    EVERY_N_MILLIS_I(thisTimer,100) {                           // This only sets the Initial timer delay. To change this value, you need to use thisTimer.setPeriod(); You could also call it thatTimer and so on.
-      uint8_t timeval = beatsin8(10,20,50);                     // Create/modify a variable based on the beastsin8() function.
-      thisTimer.setPeriod(timeval);                             // Use that as our update timer value.
-  
-      matrix_ray(millis()>>4);                                  // This is the main function that's called. We could have not passed the millis()>>4, but it's a quick example of passing an argument.
+void matrixRayLoop() {
+    EVERY_N_MILLIS_I(thisTimer,100) {
+      uint8_t timeval = beatsin8(10,20,50);
+      thisTimer.setPeriod(timeval);
+      matrixRay(millis()>>4);
     }
-  
-    EVERY_N_MILLISECONDS(100) {                                 // Fixed rate of a palette blending capability.
+    EVERY_N_MILLISECONDS(100) {
       uint8_t maxChanges = 24; 
       nblendPaletteTowardPalette(currentPalette, targetPalette, maxChanges);
     }
-  
-    EVERY_N_SECONDS(5) {                                        // Change the target palette to a random one every 5 seconds.
-      static uint8_t baseC = random8();                         // You can use this as a baseline colour if you want similar hues in the next line.
+    EVERY_N_SECONDS(5) {
+      static uint8_t baseC = random8();
       targetPalette = CRGBPalette16(CHSV(random8(), 255, random8(128,255)), CHSV(random8(), 255, random8(128,255)), CHSV(random8(), 192, random8(128,255)), CHSV(random8(), 255, random8(128,255)));
     }
     
     FastLED.show();
-  
-    Serial.println(LEDS.getFPS());
-  
 }
 
-void matrix_ray(uint8_t colorIndex) {                                                 // Send a PWM'd sinewave instead of a random happening of LED's down the strand.
+void matrixRay(uint8_t colorIndex) {
+  static uint8_t thisdir = 0;
+  static int thisphase = 0;
+  uint8_t thiscutoff;
 
-  static uint8_t thisdir = 0;                                                         // We could change the direction if we want to. Static means to assign that value only once.
-  static int thisphase = 0;                                                           // Phase change value gets calculated. Static means to assign that value only once.
-  uint8_t thiscutoff;                                                                 // You can change the cutoff value to display this wave. Lower value = longer wave.
-
-  thisphase += beatsin8(1,20, 50);                                                    // You can change direction and speed individually.
-  thiscutoff = beatsin8(50,164,248);                                                  // This variable is used for the PWM of the lighting with the qsubd command below.
+  thisphase += beatsin8(1,20, 50);
+  thiscutoff = beatsin8(50,164,248);
   
-  int thisbright = qsubd(cubicwave8(thisphase), thiscutoff);                          // It's PWM time. qsubd sets a minimum value called thiscutoff. If < thiscutoff, then thisbright = 0. Otherwise, thisbright = thiscutoff.
+  int thisbright = qsubd(cubicwave8(thisphase), thiscutoff);
  
-  if (thisdir == 0) {                                                                 // Depending on the direction, we'll put that brightness in one end of the array. Andrew Tuline wrote this.
-    leds[0] = ColorFromPalette(currentPalette, colorIndex, thisbright, currentBlending); 
-    memmove(leds+1, leds, (kLedNum-1)*3);                                            // Oh look, the FastLED method of copying LED values up/down the strand.
+  if (thisdir == 0) {
+    leds[0] = ColorFromPalette(currentPalette, colorIndex, thisbright, currentBlending);
+    memmove(leds+1, leds, (kLedNum-1)*3);
   } else {
     leds[kLedNum-1] = ColorFromPalette( currentPalette, colorIndex, thisbright, currentBlending);
     memmove(leds, leds+1, (kLedNum-1)*3);    
   }
+}
 
-} // matrix_ray()
+void beatWaveLoop() {
+  beatWave();
+  EVERY_N_MILLISECONDS(100) {
+    uint8_t maxChanges = 24; 
+    nblendPaletteTowardPalette(currentPalette, targetPalette, maxChanges);
+  }
+  EVERY_N_SECONDS(5) {
+    targetPalette = CRGBPalette16(CHSV(random8(), 255, random8(128,255)), CHSV(random8(), 255, random8(128,255)), CHSV(random8(), 192, random8(128,255)), CHSV(random8(), 255, random8(128,255)));
+  }
+  FastLED.show();
+}
+
+void beatWave() {
+  uint8_t wave1 = beatsin8(9, 0, 255);
+  uint8_t wave2 = beatsin8(8, 0, 255);
+  uint8_t wave3 = beatsin8(7, 0, 255);
+  uint8_t wave4 = beatsin8(6, 0, 255);
+
+  for (int i=0; i<kLedNum; i++) {
+    leds[i] = ColorFromPalette( currentPalette, i+wave1+wave2+wave3+wave4, 255, currentBlending); 
+  }
+}
+
+void blendWave() {
+  CRGB clr1;
+  CRGB clr2;
+  uint8_t speed;
+  uint8_t loc1;
+  
+  speed = beatsin8(6,0,255);
+
+  clr1 = blend(CHSV(beatsin8(3,0,255),255,255), CHSV(beatsin8(4,0,255),255,255), speed);
+  clr2 = blend(CHSV(beatsin8(4,0,255),255,255), CHSV(beatsin8(3,0,255),255,255), speed);
+
+  loc1 = beatsin8(10,0,kLedNum-1);
+  
+  fill_gradient_RGB(leds, 0, clr2, loc1, clr1);
+  fill_gradient_RGB(leds, loc1, clr2, kLedNum-1, clr1);
+
+  FastLED.show();
+}
+
+void dotBeat() {
+  uint8_t bpm = 30;
+
+  uint8_t inner  = beatsin8(bpm, kLedNum/4, kLedNum/4*3);  // Move 1/4 to 3/4
+  uint8_t outer  = beatsin8(bpm, 0, kLedNum-1);            // Move entire length
+  uint8_t middle = beatsin8(bpm, kLedNum/3, kLedNum/3*2);  // Move 1/3 to 2/3
+
+  leds[middle] = CRGB::Purple;
+  leds[inner]  = CRGB::Blue;
+  leds[outer]  = CRGB::Aqua;
+
+  nscale8(leds, kLedNum, 224); // Trail behind the LED's. Lower => faster fade.
+  FastLED.show();
+}
 
 ///////////////
 // MAIN LOOP //
@@ -532,16 +541,13 @@ void loop() {
   button_state = digitalRead(kButtonDinPin);
   if (button_state == HIGH && park_mode == 0 && (current_ms - button_ms) > button_block) {
     // enter parking mode
-    Serial.print("Enter parking mode");
-  Serial.print((millis() - current_ms));
-  Serial.println();
+    fill_solid(leds, kLedNum, CRGB::Black);
+    FastLED.show(); 
     displayShiftPark();
     park_mode = 1;
     button_ms = current_ms;
   } else if (button_state == HIGH && park_mode == 1 && (current_ms - button_ms) > button_block) {
-        Serial.print("Enter drive mode");
-  Serial.print((millis() - current_ms));
-  Serial.println();
+    // enter drive mode
     displayShiftDrive();
     park_mode = 0;
     button_ms = current_ms;
@@ -553,27 +559,21 @@ void loop() {
     displayPark();
     readGyro();
     twinkleStars();
-    /*
-    for(int i = 0; i < kLedNum; i++) {
-      leds[i] = CRGB::Blue;    // set our current dot to red
-      FastLED.show();
-      leds[i] = CRGB::Black;  // set our current dot to black before we continue
-    }
-    */
   } else {
     // We're in drive
     displayDrive();
     if ((current_ms - drive_effect_ms) > drive_effect_hold_ms) {
       // change to next effect
       drive_effect_num++;
-      if (drive_effect_num > 7) {
+      if (drive_effect_num > 9) {
         drive_effect_num = 1;
       }
       drive_effect_ms = current_ms;
     }
+    //drive_effect_num = 1;
     switch (drive_effect_num) {
       case 1:
-        snowSparkle(20, 20);
+        snowSparkle(20, 40);
         break;
       case 2:
         rainbowCycle(0);
@@ -582,40 +582,23 @@ void loop() {
         meteorRain(0xff,0xff,0xff,10, 64, true, 30);
         break;
       case 4:
-        CylonBounce(0xff, 0, 0, 15, 10, 50);
-        break;
-      case 5:
         rainbow_beat();
         break;
-      case 6:
+      case 5:
         rainbow_march(200, 10);
         break;
+      case 6:
+        matrixRayLoop();
+        break;
       case 7:
-        matrix_ray_loop();
+        beatWaveLoop();
+        break;
+      case 8:
+        dotBeat();
+        break;
+      case 9:
+        blendWave();
         break;
     }
-    //snowSparkle(20, 20);
-    //rainbowCycle(0);
-    //meteorRain(0xff,0xff,0xff,10, 64, true, 30);
-    //CylonBounce(0xff, 0, 0, 15, 10, 50);
-    //rainbow_beat();
-    //rainbow_march(200, 10);
-    //matrix_ray_loop();
-    /*
-    for(i = 0; i < kLedNum; i++) {
-      leds[i] = CRGB::Red;    // set our current dot to red
-      FastLED.show();
-      leds[i] = CRGB::Black;  // set our current dot to black before we continue
-    }*/
   }
-
-  
-  //delay(100);
-  
-  /*
-  Serial.print("This loop took ");
-  Serial.print((millis() - current_ms));
-  Serial.println();
-  */
-  
 }

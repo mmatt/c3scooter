@@ -1,10 +1,9 @@
 #include <FastLED.h>
 #include <MPU6050.h>
 #include <TM1637Display.h>
-#include <stdlib.h>
 
 // Constants
-const int     kVersion              = 4;
+const int     kVersion              = 5;
 const int     kDisplayClkPin        = 8;
 const int     kDisplayDioPin        = 7;
 const int     kGyroMpuAddr          = 0x68;
@@ -31,7 +30,7 @@ unsigned long button_ms             = 0;
 unsigned int  button_state          = 0;
 unsigned int  button_block          = 1000;
 
-unsigned int  park_mode             = 1;
+unsigned int  park_mode             = 0;
 unsigned long park_dot_ms           = 0;
 unsigned int  park_dot_state        = 0;
 unsigned long park_flash_ms         = 0;

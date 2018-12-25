@@ -1,9 +1,10 @@
 #include <FastLED.h>
 #include <MPU6050.h>
 #include <TM1637Display.h>
+#include <stdlib.h>
 
 // Constants
-const int     kVersion              = 3;
+const int     kVersion              = 4;
 const int     kDisplayClkPin        = 8;
 const int     kDisplayDioPin        = 7;
 const int     kGyroMpuAddr          = 0x68;
@@ -19,7 +20,6 @@ const uint8_t kword_hey[]           = { 0x00, 0b01110110, 0b01111001, 0b01101110
 const uint8_t kwordSos_[]           = { 0b01101101, 0b00111111, 0b01101101, 0x00 };
 const uint8_t kword_sos[]           = { 0x00, 0b01101101, 0b00111111, 0b01101101 };
 const uint8_t kwordXxc3[]           = { 0b01001111, 0b01101101, 0b00111001, 0b01001111 };
-const uint8_t kwordXyc3[]           = { 0b01111001, 0b01011010, 0b00001111, 0b01111001 };
 const uint8_t kwordDots[]           = { 0x00, 0b10000000, 0x00, 0x00 };
 const uint8_t kwordBlnk[]           = { 0x00, 0x00, 0x00, 0x00 };
 
@@ -42,7 +42,11 @@ unsigned long park_sos_ms           = 0;
 unsigned int  park_sos_state        = 0;
 unsigned int  park_twinkle_chance   = 25;
 
-unsigned int  drive_glitch          = 0;
+unsigned long glitch_ms             = 0;
+unsigned int  glitch_random         = 0;
+uint8_t       glitched_word[]       = { 0x00, 0x00, 0x00, 0x00 };
+uint8_t       random_byte[]         = { 0x00, 0x00, 0x00, 0x00 };
+
 unsigned long drive_dot_ms          = 0;
 unsigned int  drive_dot_state       = 0;
 unsigned long drive_sparkle_ms      = 0;
@@ -99,9 +103,39 @@ int extractDigit(size_t digit, int n) {
   return display.encodeDigit(n % 10);
 }
 
-
 void glitchC3() {
+  for (int i=0; i<4; i++) {
+      if (random(10) > 6) {
+        if (random(10) > 6) {
+          random_byte[i] = getRandomByte();
+        }
+        glitched_word[i] = kwordXxc3[i] & random_byte[i];
+      } else {
+        glitched_word[i] = kwordXxc3[i];
+      }
+    }
+    display.setSegments(glitched_word);
+    //Serial.print((current_ms - glitch_ms)); Serial.print(" vs "); Serial.print(glitch_random + ((glitch_random/100) * 4));
+    //Serial.println();
+    if ((current_ms - glitch_ms) > glitch_random + ((glitch_random/100) * 4)) {
+      glitch_ms = current_ms;
+      glitch_random = 0;
+      display.setSegments(kwordXxc3);
+    }
+}
 
+uint8_t getRandomByte() {
+  static uint32_t buf = 0;
+  static uint8_t idx = 0;
+  if (idx > 2)
+  {
+    buf = random();  // refill 31 bits
+    idx = 0;
+  }
+  uint8_t t = buf & 0xFF;
+  buf >>= 8;
+  idx++;
+  return t;
 }
 
 void displayShiftPark() {
@@ -211,8 +245,8 @@ void readGyro() {
       gyro_total = abs(gyro_x_prev - gyro_x) + abs(gyro_y_prev - gyro_y) + abs(gyro_z_prev - gyro_z);
     }
 
-    Serial.print("Gyro total "); Serial.print(gyro_total);
-    Serial.println();
+    //Serial.print("Gyro total "); Serial.print(gyro_total);
+    //Serial.println();
 
     // Increase alertness on thershold (higher first step)
     if ((gyro_total > 300 && park_gyro_alert == 0) || (gyro_total > 200 && park_gyro_alert > 0)) {
@@ -235,8 +269,8 @@ void readGyro() {
       leds[park_gyro_alert] = CRGB::Black;
     } 
 
-    Serial.print("Now at: "); Serial.print(park_gyro_alert);
-    Serial.println();
+    //Serial.print("Now at: "); Serial.print(park_gyro_alert);
+    //Serial.println();
 
     // Alert flashing
     if ((current_ms - park_flash_ms) > 200 && park_gyro_alert > 50) {
@@ -553,15 +587,27 @@ void loop() {
     button_ms = current_ms;
   }
 
+  if (glitch_random == 0) {
+    glitch_random = random(4000, 20000);
+  }
+
   // Act according to mode
   if (park_mode == 1) {
     // We are parked
-    displayPark();
+    if ((current_ms - glitch_ms) > glitch_random) {
+      glitchC3();
+    } else {
+      displayPark();
+    }
     readGyro();
     twinkleStars();
   } else {
     // We're in drive
-    displayDrive();
+    if ((current_ms - glitch_ms) > glitch_random) {
+      glitchC3();
+    } else {
+      displayDrive();
+    }
     if ((current_ms - drive_effect_ms) > drive_effect_hold_ms) {
       // change to next effect
       drive_effect_num++;

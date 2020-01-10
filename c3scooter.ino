@@ -18,7 +18,7 @@ const uint8_t kwordHey_[]           = { 0b01110110, 0b01111001, 0b01101110, 0x00
 const uint8_t kword_hey[]           = { 0x00, 0b01110110, 0b01111001, 0b01101110 };
 const uint8_t kwordSos_[]           = { 0b01101101, 0b00111111, 0b01101101, 0x00 };
 const uint8_t kword_sos[]           = { 0x00, 0b01101101, 0b00111111, 0b01101101 };
-const uint8_t kwordXxc3[]           = { 0b01001111, 0b01101101, 0b00111001, 0b01001111 };
+const uint8_t kwordXxc3[]           = { 0b01001111, 0b00000111, 0b00111001, 0b01001111 };
 const uint8_t kwordDots[]           = { 0x00, 0b10000000, 0x00, 0x00 };
 const uint8_t kwordBlnk[]           = { 0x00, 0x00, 0x00, 0x00 };
 
